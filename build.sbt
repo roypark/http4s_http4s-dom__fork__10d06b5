@@ -66,19 +66,15 @@ Global / fileServicePort := {
       .withPort(Port.fromInt(0).get)
       .withHttpApp {
         Kleisli { req =>
-          fileService[IO](FileService.Config(".")).orNotFound.run(req).map { res =>
-            // TODO find out why mime type is not auto-inferred
-            if (req.uri.renderString.endsWith(".js"))
-              res.withHeaders(
-                "Service-Worker-Allowed" -> "/",
-                "Content-Type" -> "text/javascript"
-              )
-            else res
+          val config =
+            FileService.Config[IO](".", mimeTypes = MimeTypes(Map("js" -> MediaType.text.javascript)))
+          fileService[IO](config).orNotFound.run(req).map {
+            _.withHeaders("Service-Worker-Allowed" -> "/")
           }
         }
       }
       .withHttpWebSocketApp { wsb =>
-        HttpRoutes.of[IO] { case Method.GET -> Root => wsb.build(identity) }.orNotFound
+        HttpRoutes.of[IO] { case Method.GET -> Root / "ws" => wsb.build(identity) }.orNotFound
       }
       .build
       .map(_.address.getPort)
